@@ -1,0 +1,42 @@
+Step 1:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  nodeName: k8s-node2
+
+Step 2:
+kubectl taint nodes node1 key=value:NoSchedule
+
+Step 3:
+appsod.yml
+===========
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ngin11x
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: IfNotPresent
+  tolerations:
+  - key: "example-key"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+Step 4:
+kubectl create -f appsod.yml
+kubectl get pods
+
+Step 5:
+kubectl taint nodes node1 key:NoSchedule-
+kubectl get pods 
+

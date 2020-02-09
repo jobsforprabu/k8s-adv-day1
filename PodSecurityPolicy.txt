@@ -1,0 +1,137 @@
+Pod-Security-Context
+===================
+
+Step 1
+kubectl create namespace psp-example
+
+Step 2:
+kubectl create serviceaccount -n psp-example fake-user
+
+Step 3:
+kubectl create rolebinding -n psp-example fake-editor --clusterrole=edit --serviceaccount=psp-example:fake-user
+
+Step 4:
+alias kubectl-admin='kubectl -n psp-example'
+alias kubectl-user='kubectl --as=system:serviceaccount:psp-example:fake-user -n psp-example'
+
+Step 5:
+policy/example-psp.yaml 
+
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: example
+spec:
+  privileged: false  # Don't allow privileged pods!
+  # The rest fills in some required fields.
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  volumes:
+  - '*'
+
+Step 6:
+kubectl-admin create -f example-psp.yaml
+
+Step 7:
+kubectl-user create -f- <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name:      pause
+spec:
+  containers:
+    - name:  pause
+      image: k8s.gcr.io/pause
+EOF
+
+Observe:
+--------
+Error ?
+Error from server (Forbidden): error when creating "STDIN": pods "pause" is forbidden: unable to validate against any pod security policy: []
+
+Step 8:
+kubectl-user auth can-i use podsecuritypolicy/example
+
+<<What is the Answer???>>
+
+Step 9:
+
+kubectl-admin create role psp:unprivileged \
+    --verb=use \
+    --resource=podsecuritypolicy \
+    --resource-name=example
+role "psp:unprivileged" created
+
+kubectl-admin create rolebinding fake-user:psp:unprivileged \
+    --role=psp:unprivileged \
+    --serviceaccount=psp-example:fake-user
+rolebinding "fake-user:psp:unprivileged" created
+
+kubectl-user auth can-i use podsecuritypolicy/example
+
+
+<<Now the answer is..yes>>
+
+Step 10:
+
+kubectl-user create -f- <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name:      pause
+spec:
+  containers:
+    - name:  pause
+      image: k8s.gcr.io/pause
+EOF
+
+Output...
+=========
+pod "pause" created
+
+Step 11:
+
+kubectl-user create -f- <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name:      privileged
+spec:
+  containers:
+    - name:  pause
+      image: k8s.gcr.io/pause
+      securityContext:
+        privileged: true
+
+EOF
+
+Output...
+==========
+Error from server (Forbidden): error when creating "STDIN": pods "privileged" is forbidden: unable to validate against any pod security policy: [spec.containers[0].securityContext.privileged: Invalid value: true: Privileged containers are not allowed]
+
+Step 12:
+
+kubectl-user run pause --image=k8s.gcr.io/pause
+
+kubectl-user get pods
+
+kubectl-user get events | head -n 2
+
+Output:
+Error creating: pods "pause-7774d79b5-" is forbidden: no providers available to validate pod request
+
+Step 13:
+
+kubectl-admin create rolebinding default:psp:unprivileged \
+    --role=psp:unprivileged \
+    --serviceaccount=psp-example:default
+
+kubectl-user get pods --watch
+
+
