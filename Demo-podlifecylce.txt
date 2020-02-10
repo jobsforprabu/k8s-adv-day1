@@ -1,0 +1,74 @@
+# Implementing waiting for Containers - postStart,preStop and initContainers.
+# terminatingGracePeriod
+
+Step 1:
+notepad podlifecycle.txt
+======================== 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-demo
+spec:
+  containers:
+  - name: lifecycle-demo-container
+    image: nginx
+    lifecycle:
+      postStart:
+        exec:
+          command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+      preStop:
+        exec:
+          command: ["/bin/sh","-c","nginx -s quit; while killall -0 nginx; do sleep 1; done"]
+  
+  initContainers:
+  - name: init-myservice
+    image: busybox:1.28
+    command: ['sh', '-c', 'until nslookup myservice; do echo waiting for myservice; sleep 2; done;']
+  - name: init-mydb
+    image: busybox:1.28
+    command: ['sh', '-c', 'until nslookup mydb; do echo waiting for mydb; sleep 2; done;']
+  terminationGracePeriodSeconds: 60
+
+Step 2:
+kubectl create -f podlifecycle.txt
+kubectl get pods 
+kubectl describe pod lifecycle-demo
+# The pod will keep waiting for services for myservice and mydb for PostStart to work for. 
+# observe nginx container is not up.
+
+Step 3:
+Now lets create the services to see the next steps.
+
+notepad podlifecyclesvc
+======================
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myservice
+spec:
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 9376
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mydb
+spec:
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 9377
+
+Step 4:
+#kubectl create -f podlifecyclesvc.txt
+#kubectl get pods
+#kubectl describe pod lifecycle-demo
+#observe the poststartup event being executed.
+
+Step 5:
+kubectl delete -f podlifecylesvc.txt
+kubectl delete -f podlifecycle.txt
